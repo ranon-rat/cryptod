@@ -1,0 +1,9 @@
+{
+  "description": "An abstraction to use some basic OpenSSL bindings, initially thought for PQC algorithms.",
+  "license": "MIT",
+  "authors": ["ranon-rat"],
+  "copyright": "Copyright © 2026, ranon-rat",
+  "name": "cryptod",
+  "libs-posix": ["ssl", "crypto"],
+  "libs-windows": ["libssl", "libcrypto"]
+}

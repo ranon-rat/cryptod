@@ -1,0 +1,225 @@
+module ranonrat.cryptod.openssl;
+import ranonrat.cryptod.bindings;
+import ranonrat.cryptod.common;
+import ranonrat.cryptod.aes;
+
+class CreateDestroy(T, alias freer)
+{
+public:
+    T* handle;
+
+    ~this()
+    {
+        if (handle)
+        {
+            freer(handle);
+            handle = null;
+        }
+    }
+}
+
+class OpenSslKey : CreateDestroy!(EVP_PKEY, EVP_PKEY_free)
+{
+
+public:
+    size_t cipherTextLength = 0;
+
+    // this looks like this for a very simple reason
+    // if i am opening the key of another man, I need to have the
+    // ciphertextlength to know how big it could be
+    // and for that I am managing this
+    // if the pem is just opening it I dont want to add extra bs
+    this()
+    {
+    }
+
+    this(TypeMLkem tAlg)
+    {
+        switch (tAlg)
+        {
+        case TypeMLkem.ML_KEM_512:
+            this.cipherTextLength = 768;
+            break;
+        case TypeMLkem.ML_KEM_768:
+            this.cipherTextLength = 1088;
+            break;
+        case TypeMLkem.ML_KEM_1024:
+            this.cipherTextLength = 1568;
+            break;
+        default:
+            break;
+        }
+    }
+
+    SecureBuffer!ubyte getParam(string paramName)
+    {
+
+        size_t len = 0;
+        if (EVP_PKEY_get_octet_string_param(handle, paramName.ptr, null, 0, &len) <= 0)
+        {
+            throw new Exception("Error al obtener tamaño del parámetro: " ~ paramName);
+        }
+
+        auto buffer = SecureBuffer!ubyte(len);
+        if (EVP_PKEY_get_octet_string_param(handle, paramName.ptr, buffer.ptr, len, &len) <= 0)
+        {
+            throw new Exception("Error al extraer los bytes del parámetro: " ~ paramName);
+        }
+        return buffer;
+    }
+    // this can only occur if the algorithm permits it :)
+    // you should send the cipher text
+    ubyte[] encapsulate(SecureBuffer!ubyte* key)
+    {
+        if (cipherTextLength == 0)
+        {
+            return null;
+        }
+
+        OpenSslKeyCtx encap_ctx;
+        encap_ctx.handle = EVP_PKEY_CTX_new(this.handle, null);
+        EVP_PKEY_encapsulate_init(encap_ctx.handle, null);
+
+        ubyte[] ciphertext;
+        ciphertext.reserve(cipherTextLength);
+
+        auto sharedSecret = SecureBuffer!ubyte(32);
+        size_t sharedSecretLen = 32;
+        EVP_PKEY_encapsulate(encap_ctx.handle, ciphertext.ptr, &cipherTextLength,
+            sharedSecret.ptr, &sharedSecretLen);
+
+        // i must return the aes key and the cipher text
+        if (HKDFSha256(sharedSecret.ptr, sharedSecretLen, null, "aes-256-gcm key", key))
+            return ciphertext;
+        return null;
+
+    }
+    // the shared secret is 32 bytes
+    // the key can have any kind of structure From what I know 
+    // the garbage collector of d does not necessarely clean the memory completely
+    // so for that reason I prefer managing the key through a secure buffer that does not even allow for any copying
+    // and when its done it cleans it from the memory.
+    bool decapsulate(ubyte[] ciphertext, SecureBuffer!ubyte* key)
+    {
+        if (cipherTextLength == 0)
+            return false;
+
+        OpenSslKeyCtx decap_ctx;
+        decap_ctx.handle = EVP_PKEY_CTX_new(this.handle, null);
+        auto sharedSecret = SecureBuffer!ubyte(32);
+        size_t sharedSecretLen = cast(int) sharedSecret.length;
+        EVP_PKEY_decapsulate(decap_ctx.handle,
+            sharedSecret.ptr, &sharedSecretLen,
+            ciphertext.ptr, cast(int) ciphertext.length);
+        return HKDFSha256(sharedSecret.ptr, sharedSecretLen, null, "aes-256-gcm key", key);
+    }
+
+    ubyte[] signMessage(const(ubyte)[] msg)
+    {
+        OpenSslMdCTX mdCtx;
+        size_t sig_len = 0;
+        mdCtx.handle = EVP_MD_CTX_new();
+
+        if (!mdCtx.handle)
+            return null;
+        if (EVP_DigestSignInit(mdCtx.handle, null, null, null, this.handle) <= 0)
+            return null;
+        if (EVP_DigestSign(mdCtx.handle, null, &sig_len, msg.ptr, msg.length) <= 0)
+            return null;
+        auto sig = SecureBuffer!ubyte(sig_len, AllocFree.OPENSSL_MALLOC);
+        if (sig.length == 0)
+            return null;
+        if (EVP_DigestSign(mdCtx.handle, sig.ptr, &sig_len, msg.ptr, msg.length) <= 0)
+            return null;
+        return sig.toBytes();
+
+    }
+
+    bool verifyMessage(const(ubyte)[] msg, const(ubyte)[] sig)
+    {
+        OpenSslMdCTX mdCtx;
+        mdCtx.handle = EVP_MD_CTX_new();
+        if (!mdCtx.handle)
+            return false;
+        if (EVP_DigestVerifyInit(mdCtx.handle, null, null, null, this.handle) <= 0)
+            return false;
+        auto ret = EVP_DigestVerify(mdCtx.handle, sig.ptr, sig.length, msg.ptr, msg.length);
+        if (ret == 1)
+            return true;
+        return false;
+
+    }
+
+    string publicKeyToPemString()
+    {
+        OpenSslBio bio;
+        bio.handle = BIO_new(BIO_s_mem());
+        if (!bio)
+            return null;
+        if (PEM_write_bio_PUBKEY(bio.handle, this.handle) != 1)
+            return null;
+        auto pemData = SecureBuffer!char(0, AllocFree.MALLOC);
+        pemData.changeSize(BIO_get_mem_data(bio.handle, &pemData.ptr));
+        if (pemData.length <= 0 || !pemData.ptr)
+            return null;
+        string outstr = cast(string) pemData.toBytes();
+        return outstr;
+
+    }
+    // the password i guess that it would be cleaned but maybe i should manage this through a secure buffer?
+    string privateKeyToPemString(const string password)
+    {
+        OpenSslBio bio;
+        bio.handle = BIO_new(BIO_s_mem());
+        if (!bio)
+            return null;
+        if (PEM_write_bio_PrivateKey(bio.handle, this.handle, EVP_aes_256_cbc(),
+                cast(ubyte*) password.ptr, cast(int) password.length,
+                null, null) != 1)
+            return null;
+        auto pemData = SecureBuffer!char(0, AllocFree.MALLOC);
+        pemData.changeSize(BIO_get_mem_data(bio.handle, &pemData.ptr));
+        if (pemData.length <= 0 || !pemData.ptr)
+            return null;
+
+        string outstr = cast(string) pemData.toBytes();
+        return outstr;
+    }
+
+    void parsePublicPemString(const string pemString)
+    {
+        OpenSslBio bio;
+        bio.handle = BIO_new_mem_buf(pemString.ptr, -1);
+        if (!bio.handle)
+            return;
+        this.handle = PEM_read_bio_PrivateKey(bio.handle, null, null, null);
+    }
+
+    void parsePrivatePemString(const string pemString, const string password)
+    {
+        OpenSslBio bio;
+        bio.handle = BIO_new_mem_buf(pemString.ptr, -1);
+        if (!bio.handle)
+            return;
+        this.handle = PEM_read_bio_PrivateKey(bio.handle, null, null, cast(void*) password.ptr);
+    }
+
+}
+
+class OpenSslMdCTX : CreateDestroy!(EVP_MD_CTX, EVP_MD_CTX_free)
+{
+
+}
+
+class OpenSslCipherCtx : CreateDestroy!(EVP_CIPHER_CTX, EVP_CIPHER_CTX_free)
+{
+}
+
+class OpenSslKeyCtx : CreateDestroy!(EVP_PKEY_CTX, EVP_PKEY_CTX_free)
+{
+
+}
+
+class OpenSslBio : CreateDestroy!(BIO, BIO_free)
+{
+}
