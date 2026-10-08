@@ -19,6 +19,18 @@ public:
     }
 }
 
+void OpenSslReadError()
+{
+
+    auto buf = SecureBuffer!char(256, AllocFree.MALLOC);
+    ERR_error_string_n(ERR_get_error(), buf.ptr, buf.length);
+    if (buf.ptr)
+    {
+        throw new Exception(cast(string) buf.toBytes());
+    }
+    throw new Exception("Why was I called?");
+}
+
 class OpenSslKey : CreateDestroy!(EVP_PKEY, EVP_PKEY_free)
 {
 
@@ -73,18 +85,21 @@ public:
     ubyte[] generateSharedSecret(SecureBuffer!ubyte* key)
     {
         if (this.cipherTextLength == 0)
-            return null;
+            throw new Exception("this key does not support encapsulation");
         auto encap_ctx = new OpenSslKeyCtx();
         encap_ctx.handle = EVP_PKEY_CTX_new(this.handle, null);
-        EVP_PKEY_encapsulate_init(encap_ctx.handle, null);
-
+        if (!encap_ctx.handle)
+            OpenSslReadError();
+        if (EVP_PKEY_encapsulate_init(encap_ctx.handle, null) <= 0)
+            OpenSslReadError();
         auto ciphertext = SecureBuffer!ubyte(this.cipherTextLength, AllocFree.MALLOC);
 
         auto sharedSecret = SecureBuffer!ubyte(32);
         size_t sharedSecretLen = 32;
-        EVP_PKEY_encapsulate(encap_ctx.handle,
-            ciphertext.ptr, &ciphertext.length,
-            sharedSecret.ptr, &sharedSecretLen);
+        if (EVP_PKEY_encapsulate(encap_ctx.handle,
+                ciphertext.ptr, &ciphertext.length,
+                sharedSecret.ptr, &sharedSecretLen) <= 0)
+            OpenSslReadError();
         // i must return the aes key and the cipher text
         if (HKDFSha256(sharedSecret.ptr, sharedSecretLen, null, "aes-256-gcm key", key))
             return ciphertext.toBytes();
@@ -96,31 +111,29 @@ public:
     // the garbage collector of d does not necessarely clean the memory completely
     // so for that reason I prefer managing the key through a secure buffer that does not even allow for any copying
     // and when its done it cleans it from the memory.
-    bool decryptCipherText(ubyte[] ciphertext, SecureBuffer!ubyte* key)
+    void decryptCipherText(ubyte[] ciphertext, SecureBuffer!ubyte* key)
     {
         if (cipherTextLength == 0)
-            return false;
+            throw new Exception("this key does not support encapsulation");
 
         auto decap_ctx = new OpenSslKeyCtx();
         decap_ctx.handle = EVP_PKEY_CTX_new(this.handle, null);
         if (decap_ctx.handle is null)
-            return false;
+            OpenSslReadError();
 
-        if (EVP_PKEY_decapsulate_init(decap_ctx.handle, null) <= 0) // ← ESTO FALTABA
-            return false;
+        if (EVP_PKEY_decapsulate_init(decap_ctx.handle, null) <= 0)
+            OpenSslReadError();
 
         auto sharedSecret = SecureBuffer!ubyte(32);
         size_t sharedSecretLen = sharedSecret.length;
 
         if (EVP_PKEY_decapsulate(decap_ctx.handle,
                 sharedSecret.ptr, &sharedSecretLen,
-                ciphertext.ptr, ciphertext.length) <= 0) // ← chequear retorno
-            return false;
+                ciphertext.ptr, ciphertext.length) <= 0)
+            OpenSslReadError();
+        // why i am doing this?
 
-        if (sharedSecretLen != 32)
-            return false;
-
-        return HKDFSha256(sharedSecret.ptr, sharedSecretLen, null, "aes-256-gcm key", key);
+        HKDFSha256(sharedSecret.ptr, sharedSecretLen, null, "aes-256-gcm key", key);
     }
 
     ubyte[] signMessage(const(ubyte)[] msg)
@@ -131,16 +144,16 @@ public:
         mdCtx.handle = EVP_MD_CTX_new();
 
         if (!mdCtx.handle)
-            return null;
+            OpenSslReadError();
         if (EVP_DigestSignInit(mdCtx.handle, null, null, null, this.handle) <= 0)
-            return null;
+            OpenSslReadError();
         if (EVP_DigestSign(mdCtx.handle, null, &sig_len, msg.ptr, msg.length) <= 0)
-            return null;
+            OpenSslReadError();
         auto sig = SecureBuffer!ubyte(sig_len, AllocFree.OPENSSL_MALLOC);
         if (sig.length == 0)
-            return null;
+            OpenSslReadError();
         if (EVP_DigestSign(mdCtx.handle, sig.ptr, &sig_len, msg.ptr, msg.length) <= 0)
-            return null;
+            OpenSslReadError();
         return sig.toBytes();
 
     }
@@ -151,9 +164,9 @@ public:
         auto mdCtx = new OpenSslMdCTX();
         mdCtx.handle = EVP_MD_CTX_new();
         if (!mdCtx.handle)
-            return false;
+            OpenSslReadError();
         if (EVP_DigestVerifyInit(mdCtx.handle, null, null, null, this.handle) <= 0)
-            return false;
+            OpenSslReadError();
         auto ret = EVP_DigestVerify(mdCtx.handle, sig.ptr, sig.length, msg.ptr, msg.length);
         if (ret == 1)
             return true;
@@ -167,13 +180,13 @@ public:
         bio.handle = BIO_new(BIO_s_mem());
 
         if (!bio)
-            return null;
+            OpenSslReadError();
         if (PEM_write_bio_PUBKEY(bio.handle, this.handle) != 1)
-            return null;
+            OpenSslReadError();
         auto pemData = SecureBuffer!char(0, AllocFree.MALLOC);
         pemData.changeSize(BIO_get_mem_data(bio.handle, &pemData.ptr));
         if (pemData.length <= 0 || !pemData.ptr)
-            return null;
+            OpenSslReadError();
         string outstr = cast(string) pemData.toBytes();
         return outstr;
 
@@ -185,15 +198,15 @@ public:
         auto bio = new OpenSslBio();
         bio.handle = BIO_new(BIO_s_mem());
         if (!bio)
-            return null;
+            OpenSslReadError();
         if (PEM_write_bio_PrivateKey(bio.handle, this.handle, EVP_aes_256_cbc(),
                 cast(ubyte*) password.ptr, cast(int) password.length,
                 null, null) != 1)
-            return null;
+            OpenSslReadError();
         auto pemData = SecureBuffer!char(0, AllocFree.MALLOC);
         pemData.changeSize(BIO_get_mem_data(bio.handle, &pemData.ptr));
         if (pemData.length <= 0 || !pemData.ptr)
-            return null;
+            OpenSslReadError();
 
         string outstr = cast(string) pemData.toBytes();
         return outstr;
@@ -204,8 +217,11 @@ public:
         auto bio = new OpenSslBio();
         bio.handle = BIO_new_mem_buf(pemString.ptr, -1);
         if (!bio.handle)
-            return;
+            OpenSslReadError();
         this.handle = PEM_read_bio_PUBKEY(bio.handle, null, null, null);
+        if (!this.handle)
+            OpenSslReadError();
+
     }
 
     void parsePrivatePemString(const string pemString, const string password)
@@ -215,6 +231,8 @@ public:
         if (!bio.handle)
             return;
         this.handle = PEM_read_bio_PrivateKey(bio.handle, null, null, cast(void*) password.ptr);
+        if (!this.handle)
+            OpenSslReadError();
     }
 
 }

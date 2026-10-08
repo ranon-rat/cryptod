@@ -159,6 +159,10 @@ int RAND_bytes(ubyte* buf, int num);
 // error messaging
 
 void ERR_print_errors_fp(FILE* fp);
+char* ERR_error_string(ulong e, char* buf);
+void ERR_error_string_n(ulong e, char* buf, size_t len);
+ulong ERR_get_error();
+
 // utils
 
 int EVP_PKEY_get_octet_string_param(const(EVP_PKEY)* pkey, const(char)* key_name,

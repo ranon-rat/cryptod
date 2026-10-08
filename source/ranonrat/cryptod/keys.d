@@ -15,13 +15,14 @@ OpenSslKey GenerateRSAKey()
     auto ctx = new OpenSslKeyCtx();
     ctx.handle = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, null);
     if (!ctx.handle)
-        return pkey;
+        OpenSslReadError();
     if (EVP_PKEY_keygen_init(ctx.handle) <= 0)
-        return pkey;
+        OpenSslReadError();
     if (EVP_PKEY_CTX_set_rsa_keygen_bits(ctx.handle, 2048) <= 0)
-        return pkey;
+        OpenSslReadError();
+
     if (EVP_PKEY_keygen(ctx.handle, &pkey.handle) <= 0)
-        return pkey;
+        OpenSslReadError();
     return pkey;
 }
 // eqdsa bs
@@ -31,11 +32,16 @@ OpenSslKey generateEcKey()
     auto ctx = new OpenSslKeyCtx();
     ctx.handle = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, null);
     if (ctx.handle)
-        return pkey;
-    EVP_PKEY_keygen_init(ctx.handle);
+        OpenSslReadError();
 
-    EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx.handle, NID_X9_62_prime256v1);
-    EVP_PKEY_keygen(ctx.handle, &pkey.handle);
+    if (EVP_PKEY_keygen_init(ctx.handle) <= 0)
+        OpenSslReadError();
+
+    if (EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx.handle, NID_X9_62_prime256v1) <= 0)
+        OpenSslReadError();
+
+    if (EVP_PKEY_keygen(ctx.handle, &pkey.handle) <= 0)
+        OpenSslReadError();
     return pkey;
 }
 // OQS bs
@@ -48,10 +54,14 @@ OpenSslKey GenerateOQSProvider(const(string) alg_name)
     auto ctx = new OpenSslKeyCtx();
     ctx.handle = EVP_PKEY_CTX_new_from_name(null, alg_name.ptr, null);
     if (!ctx)
-        return pkey;
-    EVP_PKEY_keygen_init(ctx.handle);
+        OpenSslReadError();
 
-    EVP_PKEY_keygen(ctx.handle, &pkey.handle);
+    if (EVP_PKEY_keygen_init(ctx.handle) <= 0)
+        OpenSslReadError();
+
+    if (EVP_PKEY_keygen(ctx.handle, &pkey.handle) <= 0)
+        OpenSslReadError();
+
     return pkey;
 }
 
@@ -78,10 +88,7 @@ OpenSslKey GenerateMLKemKey(TypeMLkem tAlg)
     }
 
     if (pkey.handle is null)
-    {
-        writeln("encriptionKey.handle is null, aborting");
-        return pkey;
-    }
+        OpenSslReadError();
     return pkey;
 
 }
