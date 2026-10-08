@@ -81,7 +81,7 @@ public:
         return buffer;
     }
     // this can only occur if the algorithm permits it :)
-    // you should send the cipher text.
+    // you should send the cipher text
     ubyte[] generateSharedSecret(SecureBuffer!ubyte* key)
     {
         if (this.cipherTextLength == 0)
