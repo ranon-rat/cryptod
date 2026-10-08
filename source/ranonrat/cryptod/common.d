@@ -43,7 +43,7 @@ struct SecureBuffer(T = ubyte)
         {
             if (this.tAlloc != AllocFree.MALLOC)
                 OPENSSL_cleanse(ptr, length);
-            free(ptr); // siempre free, porque siempre reservaste con malloc
+            free(ptr);
             ptr = null;
             length = 0;
 
