@@ -16,3 +16,5 @@ cryptod-test-*
 *.obj
 *.lst
 c-examples/
+.vscode
+cryptod.rdi

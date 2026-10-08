@@ -10,12 +10,12 @@ struct SecureBuffer(T = ubyte)
     size_t length;
     AllocFree tAlloc;
 
-    this(size_t size, AllocFree talloc = AllocFree.MALLOC_SECRET)
+    this(size_t size, AllocFree talloc = AllocFree.MALLOC, bool allocNow = false)
     {
 
         this.length = size;
         this.tAlloc = talloc;
-        if (size > 0)
+        if (size > 0 || allocNow)
         {
             if (this.tAlloc == AllocFree.OPENSSL_MALLOC)
                 this.ptr = cast(T*) OPENSSL_malloc(size);
@@ -39,12 +39,11 @@ struct SecureBuffer(T = ubyte)
     @disable this(this);
     ~this()
     {
-        if (ptr)
+        if (ptr is null)
         {
             if (this.tAlloc != AllocFree.MALLOC)
                 OPENSSL_cleanse(ptr, length);
-
-            free(ptr);
+            free(ptr); // siempre free, porque siempre reservaste con malloc
             ptr = null;
             length = 0;
 
@@ -57,7 +56,7 @@ enum AllocFree
 {
 
     OPENSSL_MALLOC,
-    MALLOC_SECRET,
+    MALLOC_SECURE,
     MALLOC
 
 }

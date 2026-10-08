@@ -12,7 +12,7 @@ import std.stdio;
 OpenSslKey GenerateRSAKey()
 {
     auto pkey = new OpenSslKey();
-    OpenSslKeyCtx ctx;
+    auto ctx = new OpenSslKeyCtx();
     ctx.handle = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, null);
     if (!ctx.handle)
         return pkey;
@@ -28,7 +28,7 @@ OpenSslKey GenerateRSAKey()
 OpenSslKey generateEcKey()
 {
     auto pkey = new OpenSslKey();
-    OpenSslKeyCtx ctx;
+    auto ctx = new OpenSslKeyCtx();
     ctx.handle = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, null);
     if (ctx.handle)
         return pkey;
@@ -45,7 +45,7 @@ OpenSslKey generateEcKey()
 OpenSslKey GenerateOQSProvider(const(string) alg_name)
 {
     auto pkey = new OpenSslKey();
-    OpenSslKeyCtx ctx;
+    auto ctx = new OpenSslKeyCtx();
     ctx.handle = EVP_PKEY_CTX_new_from_name(null, alg_name.ptr, null);
     if (!ctx)
         return pkey;

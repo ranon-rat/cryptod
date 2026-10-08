@@ -35,7 +35,7 @@ enum int NID_X9_62_prime256v1 = 415;
 enum int EVP_PKEY_NONE = 0;
 enum int EVP_CTRL_GCM_SET_TAG = 17; // KEY initialization
 enum int BIO_CTRL_INFO = 3;
-
+enum int OPENSSL_LINE = 84;
 EVP_MD_CTX* EVP_MD_CTX_new(); // message
 int EVP_PKEY_derive_init(EVP_PKEY_CTX* ctx);
 int EVP_PKEY_derive(EVP_PKEY_CTX* ctx, ubyte* key, size_t* keylen);
@@ -96,6 +96,9 @@ long BIO_get_mem_data(BIO* b, char** pp)
 }
 
 BIO* BIO_new_mem_buf(const void* buf, int len);
+
+EVP_PKEY* PEM_read_bio_PUBKEY(BIO* pem_string, EVP_PKEY** x,
+    pem_password_cb* cb, void* u);
 EVP_PKEY* PEM_read_bio_PrivateKey(BIO* bp, EVP_PKEY** x,
     pem_password_cb cb, void* u);
 
@@ -127,7 +130,13 @@ int EVP_DecryptFinal_ex(EVP_CIPHER_CTX* ctx, ubyte* outm, int* outl);
 // free memory
 void EVP_PKEY_CTX_free(EVP_PKEY_CTX* ctx);
 void EVP_CIPHER_CTX_free(EVP_CIPHER_CTX* ctx);
-void OPENSSL_free(void* addr);
+void OPENSSL_free(void* addr)
+{
+    return CRYPTO_free(addr, null, 0);
+}
+
+void CRYPTO_free(void* ptr, const char* file, int line);
+
 int BIO_free(BIO* a);
 void EVP_MD_CTX_free(EVP_MD_CTX* ctx);
 void OPENSSL_cleanse(void* ptr, size_t len);
