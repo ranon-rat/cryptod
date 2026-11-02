@@ -51,6 +51,21 @@ struct SecureBuffer(T = ubyte)
     }
 
 }
+// i really hate c
+extern (C) int passwordCallback(char* buf, int size, int rwflag, void* userdata)
+{
+    if (userdata is null)
+        return 0;
+
+    const char* password = cast(const char*) userdata;
+    size_t passLen = strlen(password);
+
+    if (passLen >= size)
+        return 0;
+
+    memcpy(buf, password, passLen + 1);
+    return cast(int) passLen;
+}
 
 enum AllocFree
 {

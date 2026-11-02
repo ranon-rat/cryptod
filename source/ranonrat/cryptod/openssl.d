@@ -197,9 +197,14 @@ public:
     // the password i guess that it would be cleaned but maybe i should manage this through a secure buffer?
     string privateKeyToPemString(const string password)
     {
+        if (password.length == 0)
+            throw new Exception("empty password");
+        if (password.length > int.max)
+            throw new Exception("dont do that");
         auto bio = new OpenSslBio();
         bio.handle = BIO_new(BIO_s_mem());
-        if (!bio)
+        if (!bio.handle)
+
             OpenSslReadError();
         if (PEM_write_bio_PrivateKey(bio.handle, this.handle, EVP_aes_256_cbc(),
                 cast(ubyte*) password.ptr, cast(int) password.length,
@@ -228,16 +233,26 @@ public:
 
     void parsePrivatePemString(const string pemString, const string password)
     {
-
         auto c_pemString = toStringz(pemString);
+
         OpenSslBio bio;
         bio.handle = BIO_new_mem_buf(c_pemString, -1);
         if (!bio.handle)
             OpenSslReadError();
+
         auto c_password = toStringz(password);
-        this.handle = PEM_read_bio_PrivateKey(bio.handle, null, null, cast(void*) c_password);
+
+        this.handle = PEM_read_bio_PrivateKey(
+            bio.handle,
+            null,
+            &passwordCallback,
+            cast(void*) c_password
+        );
+
         if (!this.handle)
             OpenSslReadError();
+
+        // NO llames BIO_free aquí si OpenSslBio ya lo hace en su destructor.
     }
 
 }
