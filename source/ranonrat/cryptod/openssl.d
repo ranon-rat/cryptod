@@ -227,6 +227,7 @@ public:
 
     void parsePrivatePemString(const string pemString, const string password)
     {
+
         auto c_pemString = pemString.toStringz();
         OpenSslBio bio;
         bio.handle = BIO_new_mem_buf(c_pemString, -1);
