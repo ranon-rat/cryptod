@@ -2,6 +2,7 @@ module ranonrat.cryptod.common;
 import ranonrat.cryptod.bindings;
 
 import core.stdc.stdlib : free, malloc;
+import core.stdc.string : strlen, memcpy;
 
 struct SecureBuffer(T = ubyte)
 {
