@@ -52,10 +52,10 @@ struct SecureBuffer(T = ubyte)
     }
 
 }
-// i really hate c
-extern (C) int passwordCallback(char* buf, int size, int rwflag, void* userdata)
+
+extern (C) int passwordCallback(char* buf, int size, int rwflag, void* userdata) nothrow
 {
-    if (userdata is null)
+    if (userdata is null || buf is null || size <= 0)
         return 0;
 
     const char* password = cast(const char*) userdata;
