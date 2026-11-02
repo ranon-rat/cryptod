@@ -4,6 +4,7 @@ import ranonrat.cryptod.common;
 import ranonrat.cryptod.aes;
 import std.stdio;
 import std.string : fromStringz;
+import std.string;
 
 class CreateDestroy(T, alias freer)
 {
@@ -228,12 +229,12 @@ public:
     void parsePrivatePemString(const string pemString, const string password)
     {
 
-        auto c_pemString = pemString.toStringz();
+        auto c_pemString = toStringz(pemString);
         OpenSslBio bio;
         bio.handle = BIO_new_mem_buf(c_pemString, -1);
         if (!bio.handle)
             OpenSslReadError();
-        auto c_password = password.toStringz();
+        auto c_password = toStringz(password);
         this.handle = PEM_read_bio_PrivateKey(bio.handle, null, null, cast(void*) c_password);
         if (!this.handle)
             OpenSslReadError();
