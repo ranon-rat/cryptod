@@ -3,6 +3,7 @@ import ranonrat.cryptod.bindings;
 import ranonrat.cryptod.common;
 import ranonrat.cryptod.aes;
 import std.stdio;
+import std.string : fromStringz;
 
 class CreateDestroy(T, alias freer)
 {
@@ -22,12 +23,12 @@ public:
 void OpenSslReadError()
 {
 
-    auto buf = SecureBuffer!char(256, AllocFree.MALLOC);
+    char[256] buf;
     ERR_error_string_n(ERR_get_error(), buf.ptr, buf.length);
-    if (buf.ptr)
-    {
-        throw new Exception(cast(string) buf.toBytes());
-    }
+    string msgError = fromStringz(buf.ptr).idup;
+    if (msgError.length > 0)
+        throw new Exception(msgError);
+
     throw new Exception("Why was I called?");
 }
 
@@ -226,11 +227,13 @@ public:
 
     void parsePrivatePemString(const string pemString, const string password)
     {
+        auto c_pemString = pemString.toStringz();
         OpenSslBio bio;
-        bio.handle = BIO_new_mem_buf(pemString.ptr, -1);
+        bio.handle = BIO_new_mem_buf(c_pemString, -1);
         if (!bio.handle)
-            return;
-        this.handle = PEM_read_bio_PrivateKey(bio.handle, null, null, cast(void*) password.ptr);
+            OpenSslReadError();
+        auto c_password = password.toStringz();
+        this.handle = PEM_read_bio_PrivateKey(bio.handle, null, null, cast(void*) c_password);
         if (!this.handle)
             OpenSslReadError();
     }
