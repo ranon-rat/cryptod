@@ -7,6 +7,14 @@ void main()
 {
 	// the receiver 
 	OpenSslKey receiverKey = GenerateMLKemKey(TypeMLkem.ML_KEM_512);
+	auto privatePem = receiverKey.privateKeyToPemString(
+		"1234");
+
+	writeln(privatePem);
+	auto ExternalPrivateKey = GenerateMLKemKey(TypeMLkem.ML_KEM_512);
+	ExternalPrivateKey.parsePrivatePemString(privatePem,
+		"1234");
+
 	auto publicPem = receiverKey.publicKeyToPemString();
 	// the sender
 	OpenSslKey senderKey = GenerateMLKemKey(TypeMLkem.ML_KEM_512);

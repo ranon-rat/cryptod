@@ -235,7 +235,7 @@ public:
     {
         auto c_pemString = toStringz(pemString);
 
-        OpenSslBio bio;
+        auto bio = new OpenSslBio();
         bio.handle = BIO_new_mem_buf(c_pemString, -1);
         if (!bio.handle)
             OpenSslReadError();
