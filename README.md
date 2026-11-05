@@ -1,5 +1,5 @@
 # Cryptod
-
+> ⚠️ Please update to the most recent version of dlang, I found some weird bug that was making me crash whenever I was trying to parse a private PEM.
 its a simple library written in D. Its just an abstraction with openssl to be able to achieve the most basic functionality.
 
 It was initially thought to be used for Post quantum algorithms but I considered that It would be a good idea to make it useful for other basic algorithms that I have previously used.
